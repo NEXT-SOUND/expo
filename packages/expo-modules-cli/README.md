@@ -19,6 +19,13 @@ Generates TypeScript types for the native API an Expo module exports to JavaScri
 expo-modules generate-types packages/expo-video
 ```
 
+Write the doc comments of the API in the generated file. On each run, the command reads the block comments (`/** ... */`) above each declaration and member, and writes each one back above the declaration or member with the same TypeScript name. A comment stays with its declaration when the declaration moves. An overload keeps its comment while its signature stays the same. The other overloads of a function match in order. New declarations get no comment. A file whose only changes are doc comments is still up to date for `--check`. A file that a formatter changed is out of date, but the next run keeps its comments and writes the generated layout again.
+
+The command prints a warning in two cases:
+
+- A declaration with a comment is no longer generated, for example because it was removed or renamed. The command drops the comment and prints its text below the warning. If the declaration was renamed, add the comment to the new name.
+- A member or one-line declaration with a comment changed. The command keeps the comment and warns on that run only, so check that the comment still describes the declaration.
+
 The scanner is a macOS binary, so this command runs on macOS only. Support for Linux is planned.
 
 The command scans with the `expo-modules-macros` version that the package's `expo-modules-core` depends on, the same version the iOS build compiles the macros with. It finds that version through the `expo` package, so `expo` must be installed in the package, which every Expo module has as a peer dependency.
