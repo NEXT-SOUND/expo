@@ -4,6 +4,12 @@ internal import ExpoModulesJSI_Cxx
 import Foundation
 internal import jsi
 
+// The JSI host callback runs synchronously on the JavaScript thread; these pointers never escape it.
+private struct SynchronouslySendable<Value>: @unchecked Sendable {
+  let value: Value
+  init(_ value: Value) { self.value = value }
+}
+
 /// A Swift wrapper around a JavaScript runtime. Provides access to a JavaScript execution environment, allowing you to evaluate
 /// JavaScript code, create and manipulate JavaScript objects, functions, and values, and bridge between Swift and JavaScript.
 ///
@@ -185,12 +191,12 @@ open class JavaScriptRuntime: Equatable, Identifiable, @unchecked Sendable {
       resultPtr: UnsafeMutablePointer<facebook.jsi.Value>
     ) -> Bool {
       let propertyName = String(cString: propertyName)
-      nonisolated(unsafe) let resultPtr = resultPtr
+      let resultPtr = SynchronouslySendable(resultPtr)
 
       return withGuaranteedContext(context) { (context: HostObjectContext, runtime) in
         return JavaScriptActor.assumeIsolated {
           return forwardingSwiftErrorsToJS(runtime: runtime) {
-            try context.get(propertyName).writeJSIValue(to: resultPtr)
+            try context.get(propertyName).writeJSIValue(to: resultPtr.value)
           }
         }
       }
@@ -774,19 +780,19 @@ private func createFunctionClosure(
     // synchronous call, so the `nonisolated(unsafe)` capture is sound. This removes a per-call class
     // allocation + retain/release + dealloc that profiling showed dominating the no-op `@JS` host-call
     // floor.
-    nonisolated(unsafe) let thisPtr = thisPtr
-    nonisolated(unsafe) let argumentsPtr = argumentsPtr
-    nonisolated(unsafe) let resultPtr = resultPtr
+    let thisPtr = SynchronouslySendable(thisPtr)
+    let argumentsPtr = SynchronouslySendable(argumentsPtr)
+    let resultPtr = SynchronouslySendable(resultPtr)
 
     // See `withGuaranteedContext` for why neither the context nor the runtime is retained here, and
     // why the result is written to the caller's slot instead of being returned.
     return withGuaranteedContext(context) { (context: HostFunctionContext, runtime) in
       return JavaScriptActor.assumeIsolated {
         return forwardingSwiftErrorsToJS(runtime: runtime) {
-          let this = UnsafeMutablePointer(mutating: thisPtr).move()
-          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)
+          let this = UnsafeMutablePointer(mutating: thisPtr.value).move()
+          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr.value, count: argumentsCount)
           let thisValue = JavaScriptValue(runtime, this)
-          try context.call(thisValue, consume arguments).writeJSIValue(to: resultPtr)
+          try context.call(thisValue, consume arguments).writeJSIValue(to: resultPtr.value)
         }
       }
     }
@@ -817,18 +823,18 @@ private func createFunctionClosure(
     // handed in as a borrowed `JavaScriptUnownedValue` pointing straight at the C++-owned `this` slot:
     // it is not moved out and no owning `JavaScriptValue` is allocated, so the closure avoids the
     // per-call `weak`-runtime form/destroy and heap object that the owning `this` pays.
-    nonisolated(unsafe) let thisPtr = thisPtr
-    nonisolated(unsafe) let argumentsPtr = argumentsPtr
-    nonisolated(unsafe) let resultPtr = resultPtr
+    let thisPtr = SynchronouslySendable(thisPtr)
+    let argumentsPtr = SynchronouslySendable(argumentsPtr)
+    let resultPtr = SynchronouslySendable(resultPtr)
 
     // See `withGuaranteedContext` for why neither the context nor the runtime is retained here, and
     // why the result is written to the caller's slot instead of being returned.
     return withGuaranteedContext(context) { (context: UnownedThisHostFunctionContext, runtime) in
       return JavaScriptActor.assumeIsolated {
         return forwardingSwiftErrorsToJS(runtime: runtime) {
-          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr, count: argumentsCount)
-          let thisValue = JavaScriptUnownedValue(runtime.pointee, thisPtr)
-          try context.call(thisValue, consume arguments).writeJSIValue(to: resultPtr)
+          let arguments = JavaScriptValuesBuffer(runtime, start: argumentsPtr.value, count: argumentsCount)
+          let thisValue = JavaScriptUnownedValue(runtime.pointee, thisPtr.value)
+          try context.call(thisValue, consume arguments).writeJSIValue(to: resultPtr.value)
         }
       }
     }
