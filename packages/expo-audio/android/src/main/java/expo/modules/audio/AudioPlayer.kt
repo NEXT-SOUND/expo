@@ -24,6 +24,7 @@ import java.lang.ref.WeakReference
 
 private const val PLAYBACK_STATUS_UPDATE = "playbackStatusUpdate"
 private const val AUDIO_SAMPLE_UPDATE = "audioSampleUpdate"
+private const val REMOTE_COMMAND = "remoteCommand"
 private const val SEEK_JUMP_INTERVAL_MS: Long = 10_000
 
 @UnstableApi
@@ -217,6 +218,11 @@ class AudioPlayer(
       "currentOffsetFromLive" to currentOffsetFromLive,
       "error" to null
     )
+  }
+
+  /** Hands a remote control command to JavaScript instead of applying it to the player. */
+  internal fun emitRemoteCommand(command: String, positionSeconds: Double? = null) {
+    emit(REMOTE_COMMAND, positionSeconds?.let { mapOf("command" to command, "position" to it) } ?: mapOf("command" to command))
   }
 
   internal fun assignBasicMediaSession() {

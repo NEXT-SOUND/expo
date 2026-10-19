@@ -1,6 +1,6 @@
 import type { PermissionResponse } from 'expo';
 import { NativeModule, SharedObject } from 'expo-modules-core';
-import type { AudioMetadata, AudioMode, AudioPlaylistLoopMode, AudioPlaylistStatus, AudioSource, AudioSourceInfo, AudioStatus, PitchCorrectionQuality, RecorderState, RecordingInput, RecordingOptions, RecordingStartOptions, RecordingStatus } from './Audio.types';
+import type { AudioMetadata, AudioMode, AudioRemoteCommandEvent, AudioPlaylistLoopMode, AudioPlaylistStatus, AudioSource, AudioSourceInfo, AudioStatus, PitchCorrectionQuality, RecorderState, RecordingInput, RecordingOptions, RecordingStartOptions, RecordingStatus } from './Audio.types';
 import type { AudioLockScreenOptions } from './AudioConstants';
 import type { AudioStream } from './AudioStream.types';
 /**
@@ -222,6 +222,8 @@ export type AudioEvents = {
     playbackStatusUpdate(status: AudioStatus): void;
     /** Fired when audio sampling is enabled and new sample data is available. */
     audioSampleUpdate(data: AudioSample): void;
+    /** Fired when a remote control sends a command the app handles (see `AudioLockScreenOptions`). */
+    remoteCommand(event: AudioRemoteCommandEvent): void;
 };
 export declare class AudioRecorder extends SharedObject<RecordingEvents> {
     /**

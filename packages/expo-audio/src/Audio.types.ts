@@ -658,6 +658,25 @@ export type RecordingSource =
   | 'voice_performance'
   | 'voice_recognition';
 
+/**
+ * A command from the lock screen, the media notification, headphones or another remote control.
+ * `play`, `pause`, `togglePlayPause` and `seek` arrive only with `forwardRemoteCommands`;
+ * `nextTrack` and `previousTrack` arrive with `showNextTrack` and `showPreviousTrack`.
+ */
+export type AudioRemoteCommand =
+  | 'play'
+  | 'pause'
+  | 'togglePlayPause'
+  | 'seek'
+  | 'nextTrack'
+  | 'previousTrack';
+
+export type AudioRemoteCommandEvent = {
+  command: AudioRemoteCommand;
+  /** The requested position in seconds, for `seek`. */
+  position?: number;
+};
+
 // @docsMissing
 export type AudioMetadata = {
   title?: string;

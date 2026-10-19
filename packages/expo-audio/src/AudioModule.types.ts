@@ -3,6 +3,7 @@ import { NativeModule, SharedObject } from 'expo-modules-core';
 
 import type {
   AudioMetadata,
+  AudioRemoteCommandEvent,
   AudioMode,
   AudioPlaylistLoopMode,
   AudioPlaylistStatus,
@@ -280,6 +281,8 @@ export type AudioEvents = {
   playbackStatusUpdate(status: AudioStatus): void;
   /** Fired when audio sampling is enabled and new sample data is available. */
   audioSampleUpdate(data: AudioSample): void;
+  /** Fired when a remote control sends a command the app handles (see `AudioLockScreenOptions`). */
+  remoteCommand(event: AudioRemoteCommandEvent): void;
 };
 
 export declare class AudioRecorder extends SharedObject<RecordingEvents> {

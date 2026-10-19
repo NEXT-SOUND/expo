@@ -8,29 +8,32 @@ import androidx.media3.session.SessionResult
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import com.google.common.util.concurrent.ListenableFuture
+import expo.modules.audio.AudioLockScreenOptions
 
 @OptIn(UnstableApi::class)
-class AudioMediaSessionCallback : MediaSession.Callback {
+class AudioMediaSessionCallback(
+  private val options: AudioLockScreenOptions?
+) : MediaSession.Callback {
   override fun onConnect(
     session: MediaSession,
     controller: MediaSession.ControllerInfo
   ): MediaSession.ConnectionResult {
     try {
       // Configure commands - custom layout buttons will be rendered from session
+      val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
+        // Keep seek commands for the seek slider
+        .add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+        .add(Player.COMMAND_SEEK_FORWARD)
+        .add(Player.COMMAND_SEEK_BACK)
+      // Track navigation is offered only when the app handles it (see RemoteCommandPlayer).
+      if (options?.showNextTrack != true) {
+        playerCommands.remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM).remove(Player.COMMAND_SEEK_TO_NEXT)
+      }
+      if (options?.showPreviousTrack != true) {
+        playerCommands.remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM).remove(Player.COMMAND_SEEK_TO_PREVIOUS)
+      }
       return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
-        .setAvailablePlayerCommands(
-          MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
-            // Keep seek commands for the seek slider
-            .add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
-            .add(Player.COMMAND_SEEK_FORWARD)
-            .add(Player.COMMAND_SEEK_BACK)
-            // Remove track navigation commands
-            .remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-            .remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-            .remove(Player.COMMAND_SEEK_TO_PREVIOUS)
-            .remove(Player.COMMAND_SEEK_TO_NEXT)
-            .build()
-        )
+        .setAvailablePlayerCommands(playerCommands.build())
         .setAvailableSessionCommands(
           MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
             .add(SessionCommand(AudioControlsService.ACTION_SEEK_BACKWARD, Bundle.EMPTY))

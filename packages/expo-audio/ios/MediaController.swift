@@ -14,6 +14,7 @@ class MediaController {
   private var artworkLoadToken: UUID?
   private var currentArtworkItemIdentifier: ObjectIdentifier?
   private var isLiveStream = false
+  private var commandTargets: [(MPRemoteCommand, Any)] = []
 
   func setActivePlayer(_ player: AudioPlayer?, options: LockScreenOptions? = nil) {
     performOnMain {
@@ -232,30 +233,33 @@ class MediaController {
   }
 
   private func enableRemoteCommands(options: LockScreenOptions?) {
-    remoteCommandCenter.playCommand.addTarget { [weak self] _ in
-      guard let player = self?.activePlayer else {
-        return .commandFailed
-      }
+    // Each activation replaces the previous handlers. `addTarget(handler:)` returns the target to
+    // remove; without removing it, every new active player stacked another handler on each command.
+    removeCommandTargets()
+    let forwardsCommands = options?.forwardRemoteCommands ?? false
 
-      player.play(at: Float(player.currentRate > 0 ? player.currentRate : 1.0))
+    addTarget(remoteCommandCenter.playCommand) { player, _ in
+      if forwardsCommands {
+        player.emitRemoteCommand("play")
+      } else {
+        player.play(at: Float(player.currentRate > 0 ? player.currentRate : 1.0))
+      }
       return .success
     }
 
-    remoteCommandCenter.pauseCommand.addTarget { [weak self] _ in
-      guard let player = self?.activePlayer else {
-        return .commandFailed
+    addTarget(remoteCommandCenter.pauseCommand) { player, _ in
+      if forwardsCommands {
+        player.emitRemoteCommand("pause")
+      } else {
+        player.ref.pause()
       }
-
-      player.ref.pause()
       return .success
     }
 
-    remoteCommandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
-      guard let player = self?.activePlayer else {
-        return .commandFailed
-      }
-
-      if player.isPlaying {
+    addTarget(remoteCommandCenter.togglePlayPauseCommand) { player, _ in
+      if forwardsCommands {
+        player.emitRemoteCommand("togglePlayPause")
+      } else if player.isPlaying {
         player.ref.pause()
       } else {
         player.play(at: Float(player.currentRate > 0 ? player.currentRate : 1.0))
@@ -263,43 +267,58 @@ class MediaController {
       return .success
     }
 
-    remoteCommandCenter.changePlaybackPositionCommand.addTarget { [weak self] event in
-      guard let player = self?.activePlayer,
-      let event = event as? MPChangePlaybackPositionCommandEvent else {
+    addTarget(remoteCommandCenter.changePlaybackPositionCommand) { player, event in
+      guard let event = event as? MPChangePlaybackPositionCommandEvent else {
         return .commandFailed
       }
 
-      let seekTime = CMTime(seconds: event.positionTime, preferredTimescale: 1)
-      player.ref.seek(to: seekTime)
-
+      if forwardsCommands {
+        player.emitRemoteCommand("seek", position: event.positionTime)
+      } else {
+        let seekTime = CMTime(seconds: event.positionTime, preferredTimescale: 1)
+        player.ref.seek(to: seekTime)
+      }
       return .success
     }
 
     remoteCommandCenter.skipForwardCommand.preferredIntervals = [10.0]
-    remoteCommandCenter.skipForwardCommand.addTarget { [weak self] event in
-      guard let player = self?.activePlayer,
-      let event = event as? MPSkipIntervalCommandEvent else {
+    addTarget(remoteCommandCenter.skipForwardCommand) { player, event in
+      guard let event = event as? MPSkipIntervalCommandEvent else {
         return .commandFailed
       }
 
-      let currentTime = player.ref.currentTime()
-      let seekTime = currentTime + CMTime(seconds: event.interval, preferredTimescale: 1)
-      player.ref.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero)
-
+      let seekTime = player.ref.currentTime() + CMTime(seconds: event.interval, preferredTimescale: 1)
+      if forwardsCommands {
+        player.emitRemoteCommand("seek", position: seekTime.seconds)
+      } else {
+        player.ref.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero)
+      }
       return .success
     }
 
     remoteCommandCenter.skipBackwardCommand.preferredIntervals = [10.0]
-    remoteCommandCenter.skipBackwardCommand.addTarget { [weak self] event in
-      guard let player = self?.activePlayer,
-      let event = event as? MPSkipIntervalCommandEvent else {
+    addTarget(remoteCommandCenter.skipBackwardCommand) { player, event in
+      guard let event = event as? MPSkipIntervalCommandEvent else {
         return .commandFailed
       }
 
-      let currentTime = player.ref.currentTime()
-      let seekTime = currentTime - CMTime(seconds: event.interval, preferredTimescale: 1)
-      player.ref.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero)
+      let seekTime = player.ref.currentTime() - CMTime(seconds: event.interval, preferredTimescale: 1)
+      if forwardsCommands {
+        player.emitRemoteCommand("seek", position: max(seekTime.seconds, 0))
+      } else {
+        player.ref.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero)
+      }
+      return .success
+    }
 
+    // Track changes belong to the app's queue, so these always go to JavaScript.
+    addTarget(remoteCommandCenter.nextTrackCommand) { player, _ in
+      player.emitRemoteCommand("nextTrack")
+      return .success
+    }
+
+    addTarget(remoteCommandCenter.previousTrackCommand) { player, _ in
+      player.emitRemoteCommand("previousTrack")
       return .success
     }
 
@@ -309,6 +328,28 @@ class MediaController {
     remoteCommandCenter.changePlaybackPositionCommand.isEnabled = !isLiveStream
     remoteCommandCenter.skipForwardCommand.isEnabled = options?.showSeekForward ?? false
     remoteCommandCenter.skipBackwardCommand.isEnabled = options?.showSeekBackward ?? false
+    remoteCommandCenter.nextTrackCommand.isEnabled = options?.showNextTrack ?? false
+    remoteCommandCenter.previousTrackCommand.isEnabled = options?.showPreviousTrack ?? false
+  }
+
+  private func addTarget(
+    _ command: MPRemoteCommand,
+    handler: @escaping (AudioPlayer, MPRemoteCommandEvent) -> MPRemoteCommandHandlerStatus
+  ) {
+    let target = command.addTarget { [weak self] event in
+      guard let player = self?.activePlayer else {
+        return .commandFailed
+      }
+      return handler(player, event)
+    }
+    commandTargets.append((command, target))
+  }
+
+  private func removeCommandTargets() {
+    for (command, target) in commandTargets {
+      command.removeTarget(target)
+    }
+    commandTargets.removeAll()
   }
 
   private func disableRemoteCommands() {
@@ -318,13 +359,9 @@ class MediaController {
     remoteCommandCenter.changePlaybackPositionCommand.isEnabled = false
     remoteCommandCenter.skipForwardCommand.isEnabled = false
     remoteCommandCenter.skipBackwardCommand.isEnabled = false
+    remoteCommandCenter.nextTrackCommand.isEnabled = false
+    remoteCommandCenter.previousTrackCommand.isEnabled = false
 
-    // Remove event targets
-    remoteCommandCenter.playCommand.removeTarget(self)
-    remoteCommandCenter.pauseCommand.removeTarget(self)
-    remoteCommandCenter.togglePlayPauseCommand.removeTarget(self)
-    remoteCommandCenter.changePlaybackPositionCommand.removeTarget(self)
-    remoteCommandCenter.skipForwardCommand.removeTarget(self)
-    remoteCommandCenter.skipBackwardCommand.removeTarget(self)
+    removeCommandTargets()
   }
 }

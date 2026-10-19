@@ -4,6 +4,7 @@ import Combine
 private enum AudioConstants {
   static let playbackStatus = "playbackStatusUpdate"
   static let audioSample = "audioSampleUpdate"
+  static let remoteCommand = "remoteCommand"
 }
 
 public class AudioPlayer: SharedRef<AVPlayer>, Playable {
@@ -162,6 +163,15 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
     } else {
       MediaController.shared.setActivePlayer(nil)
     }
+  }
+
+  /// Hands a remote control command to JavaScript instead of applying it to the player.
+  func emitRemoteCommand(_ command: String, position: Double? = nil) {
+    var payload: [String: Any] = ["command": command]
+    if let position {
+      payload["position"] = position
+    }
+    self.emit(event: AudioConstants.remoteCommand, payload: payload)
   }
 
   func updateStatus(with dict: [String: Any]) {
