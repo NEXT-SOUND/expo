@@ -1,5 +1,11 @@
 # Changelog
 
+## 58.0.21
+
+### Patch Changes
+
+- [Web] Stop the community `SegmentedControl` from logging the `useNativeDriver` warning when it mounts. ([#51775](https://github.com/expo/expo/pull/51775) by [@miniware9](https://github.com/miniware9))
+
 ## 58.0.20
 
 ### Patch Changes
